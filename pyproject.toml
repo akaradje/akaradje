@@ -1,7 +1,7 @@
 [project]
 name = "akaradje-chatbot"
-version = "0.1.0"
-description = "Scaffolded chatbot with Router + ReAct + Verifier + Best-of-N over DeepSeek API"
+version = "0.2.0"
+description = "DeepSeek V4 Pro chatbot with Opus 4.7-class scaffolding: thinking mode, effort routing, task budgets, tool use, Best-of-N"
 requires-python = ">=3.11"
 dependencies = [
     "openai>=1.50.0",
@@ -9,7 +9,6 @@ dependencies = [
     "pydantic>=2.8.0",
     "rich>=13.7.1",
     "tenacity>=9.0.0",
-    "numpy>=1.26.0",
 ]
 
 [project.optional-dependencies]
