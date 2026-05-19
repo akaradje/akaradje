@@ -1,15 +1,12 @@
-"""Best-of-N voting.
+"""Best-of-N voting with diversity through prompt variation.
 
-For COMPLEX queries we sample N independent candidate answers from the
-generator (each running its own ReAct loop), then have the verifier score
-all of them, and return the highest-scoring one.
+Since DeepSeek V4 IGNORES temperature in thinking mode, we can't just
+sample with different temps. Instead, we achieve diversity by giving each
+parallel sample a slightly different "approach angle" in the system prompt.
 
-Why parallel sampling instead of iterative self-refinement?
-    - Self-refine tends to anchor on the first attempt and only patch
-      surface issues.
-    - Independent samples explore different reasoning paths, which is what
-      "self-consistency" research showed empirically improves accuracy.
-    - It parallelizes trivially.
+This is MORE principled than temperature diversity anyway — it forces the
+model to explore genuinely different reasoning paths rather than just
+random token sampling.
 """
 
 from __future__ import annotations
@@ -19,11 +16,24 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
-from .config import Config
+from .config import Config, ReasoningEffort, ThinkingMode
 from .executor import Executor, ExecutorResult
+from .task_budget import BudgetStatus, TaskBudgetManager
 from .verifier import VerificationResult, Verifier
 
 log = logging.getLogger(__name__)
+
+
+# Different "approach angle" suffixes to inject diversity.
+# Each candidate gets a different thinking style directive.
+_DIVERSITY_SUFFIXES = [
+    "",  # default — no modification
+    "\nApproach: Start by identifying potential edge cases and failure modes.",
+    "\nApproach: Begin with the simplest possible solution, then refine.",
+    "\nApproach: Think about this from first principles. Question assumptions.",
+    "\nApproach: Consider multiple strategies before committing to one.",
+    "\nApproach: Focus on correctness first, clarity second.",
+]
 
 
 @dataclass
@@ -34,8 +44,6 @@ class Candidate:
 
     @property
     def score(self) -> float:
-        # Penalize failed verdicts so a high-overall but failed answer
-        # doesn't beat a slightly-lower passing one.
         base = self.verdict.score
         return base if self.verdict.passed else base - 3.0
 
@@ -51,42 +59,56 @@ class VotingResult:
 
 
 class Voter:
-    def __init__(self, executor: Executor, verifier: Verifier, config: Config):
+    def __init__(
+        self,
+        executor: Executor,
+        verifier: Verifier,
+        config: Config,
+        budget_manager: TaskBudgetManager,
+    ):
         self._executor = executor
         self._verifier = verifier
         self._cfg = config
+        self._budget_mgr = budget_manager
 
     async def vote(
         self,
         query: str,
         *,
-        model: str,
+        thinking: ThinkingMode = ThinkingMode.ENABLED,
+        reasoning_effort: ReasoningEffort = ReasoningEffort.HIGH,
         n: int | None = None,
         prior_messages: list[dict[str, Any]] | None = None,
     ) -> VotingResult:
         n = n if n is not None else self._cfg.best_of_n
-        n = max(1, n)
-        log.info("voter: sampling %d candidates on %s", n, model)
+        n = max(1, min(n, len(_DIVERSITY_SUFFIXES)))
+        log.info("voter: sampling %d candidates with effort=%s", n, reasoning_effort.value)
 
-        # Slight temperature jitter so the N samples are actually diverse.
-        # All samples >= 1 use a step above the base temperature.
-        temps = [self._cfg.temperature_generate] + [
-            min(1.2, self._cfg.temperature_generate + 0.1 * i) for i in range(1, n)
-        ]
+        # Each candidate gets its own budget allocation
+        # (total budget split equally among candidates)
+        exec_tasks = []
+        for i in range(n):
+            # Create per-candidate budget (fraction of total)
+            budget = self._budget_mgr.create()
+            if not budget.unlimited:
+                budget.total_budget = budget.total_budget // n
 
-        exec_tasks = [
-            self._executor.run(
-                query,
-                model=model,
-                temperature=temps[i],
-                prior_messages=prior_messages,
+            # Inject diversity suffix into prior_messages
+            varied_prior = self._inject_diversity(prior_messages, i)
+
+            exec_tasks.append(
+                self._executor.run(
+                    query,
+                    thinking=thinking,
+                    reasoning_effort=reasoning_effort,
+                    budget=budget,
+                    prior_messages=varied_prior,
+                )
             )
-            for i in range(n)
-        ]
+
         executor_results: list[ExecutorResult] = list(await asyncio.gather(*exec_tasks))
 
-        # Verify each in parallel. Verifier sees only (query, answer) — the
-        # executor transcript is intentionally NOT passed in.
+        # Verify each (verifier sees only Q, A — never the reasoning trace)
         verdict_tasks = [
             self._verifier.verify(query, er.answer) for er in executor_results
         ]
@@ -97,8 +119,7 @@ class Voter:
             for er, v in zip(executor_results, verdicts)
         ]
 
-        # Pick highest score, with passed-status as the tiebreaker. Stable
-        # sort so on exact ties the first-sampled candidate wins.
+        # Pick highest score
         ranked = sorted(
             enumerate(candidates),
             key=lambda iv: (-iv[1].score, iv[0]),
@@ -106,9 +127,22 @@ class Voter:
         winner_idx, winner = ranked[0]
         log.info(
             "voter: winner=#%d score=%.1f passed=%s (scores=%s)",
-            winner_idx,
-            winner.score,
-            winner.verdict.passed,
+            winner_idx, winner.score, winner.verdict.passed,
             [round(c.score, 1) for c in candidates],
         )
         return VotingResult(winner=winner, candidates=candidates)
+
+    @staticmethod
+    def _inject_diversity(
+        prior_messages: list[dict[str, Any]] | None,
+        index: int,
+    ) -> list[dict[str, Any]]:
+        """Add a diversity suffix to the system message for this candidate."""
+        suffix = _DIVERSITY_SUFFIXES[index % len(_DIVERSITY_SUFFIXES)]
+        if not suffix:
+            return prior_messages or []
+
+        prior = list(prior_messages or [])
+        # Append as a system-level nudge
+        prior.append({"role": "system", "content": suffix.strip()})
+        return prior

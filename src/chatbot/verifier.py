@@ -1,11 +1,11 @@
-"""LLM-as-Judge verifier.
+"""LLM-as-Judge verifier using DeepSeek V4 thinking mode.
 
-A separate model call that scores a candidate answer against the original
-question. The crucial design choice: the verifier sees ONLY the question and
-the final answer — never the generator's scratchpad or tool transcripts.
+Uses `reasoning_effort: "high"` so the verifier actually THINKS about
+whether the answer is correct. The thinking trace makes verification
+substantially more reliable than asking without CoT.
 
-This avoids the standard self-agreement failure mode where a model that has
-just produced a flawed chain of thought is happy to rubber-stamp the result.
+Critical design: the verifier sees ONLY (question, answer) — never the
+generator's scratchpad. This prevents the self-agreement failure mode.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ import re
 from dataclasses import dataclass
 
 from .client import LLMClient
-from .config import Config
+from .config import Config, ReasoningEffort, ThinkingMode
 
 log = logging.getLogger(__name__)
 
@@ -53,11 +53,11 @@ class VerificationResult:
     overall: int
     passed: bool
     issues: list[str]
+    reasoning: str | None  # the verifier's thinking trace (for debugging)
     raw: str
 
     @property
     def score(self) -> float:
-        """Floating-point overall score, useful for tie-breaking in voting."""
         return float(self.overall)
 
 
@@ -68,15 +68,9 @@ class Verifier:
 
     async def verify(self, question: str, answer: str) -> VerificationResult:
         if not self._cfg.verifier_enabled:
-            # Verifier disabled — assume pass with neutral score.
             return VerificationResult(
-                correctness=7,
-                completeness=7,
-                clarity=7,
-                overall=7,
-                passed=True,
-                issues=[],
-                raw="(verifier disabled)",
+                correctness=7, completeness=7, clarity=7, overall=7,
+                passed=True, issues=[], reasoning=None, raw="(verifier disabled)",
             )
 
         user = (
@@ -85,42 +79,35 @@ class Verifier:
             "Review the candidate answer per the rubric and output the JSON."
         )
         try:
-            text = await self._client.chat_text(
-                model=self._cfg.model_verifier,
+            resp = await self._client.chat(
                 messages=[
                     {"role": "system", "content": _VERIFIER_SYSTEM},
                     {"role": "user", "content": user},
                 ],
-                temperature=self._cfg.temperature_verifier,
-                max_tokens=600,
+                # Verifier uses thinking mode to reason about correctness
+                thinking=ThinkingMode.ENABLED,
+                reasoning_effort=ReasoningEffort.HIGH,
+                max_tokens=1000,
             )
-        except Exception as exc:  # pragma: no cover — network path
+        except Exception as exc:
             log.warning("verifier: call failed (%s) — passing through", exc)
             return VerificationResult(
-                correctness=5,
-                completeness=5,
-                clarity=5,
-                overall=5,
-                passed=True,
-                issues=[f"verifier unavailable: {exc}"],
-                raw="",
+                correctness=5, completeness=5, clarity=5, overall=5,
+                passed=True, issues=[f"verifier unavailable: {exc}"],
+                reasoning=None, raw="",
             )
 
-        return self._parse(text)
+        return self._parse(resp.content, reasoning=resp.reasoning_content)
 
     @staticmethod
-    def _parse(text: str) -> VerificationResult:
+    def _parse(text: str, reasoning: str | None = None) -> VerificationResult:
         obj = _extract_json(text)
         if obj is None:
             log.warning("verifier: could not parse JSON, defaulting to neutral")
             return VerificationResult(
-                correctness=5,
-                completeness=5,
-                clarity=5,
-                overall=5,
-                passed=True,
-                issues=["verifier output not parseable"],
-                raw=text,
+                correctness=5, completeness=5, clarity=5, overall=5,
+                passed=True, issues=["verifier output not parseable"],
+                reasoning=reasoning, raw=text,
             )
         return VerificationResult(
             correctness=_clip(obj.get("correctness", 5)),
@@ -129,6 +116,7 @@ class Verifier:
             overall=_clip(obj.get("overall", 5)),
             passed=bool(obj.get("pass", True)),
             issues=[str(i) for i in obj.get("issues", [])][:10],
+            reasoning=reasoning,
             raw=text,
         )
 
@@ -142,12 +130,10 @@ def _clip(v: object) -> int:
 
 
 def _extract_json(text: str) -> dict | None:
-    # Strict parse first.
     try:
         return json.loads(text)
     except json.JSONDecodeError:
         pass
-    # Fallback: find the first {...} block.
     match = re.search(r"\{.*\}", text, re.DOTALL)
     if match:
         try:

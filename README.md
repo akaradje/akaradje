@@ -1,83 +1,113 @@
 # akaradje
 
-A scaffolded chatbot built on top of the DeepSeek API. Implements the
-production-style pattern that makes frontier-class assistants feel "smart" —
-not by inventing buzzwords, but by composing well-known techniques:
+A DeepSeek V4 Pro chatbot with **Opus 4.7-class scaffolding**.
+
+Instead of inventing jargon, this implements the actual engineering patterns
+that make frontier models feel smart — applied to DeepSeek's API:
 
 ```
-Query → Router → (Fast | Standard | Deep)
+Query → Router → Complexity tier (TRIVIAL / STANDARD / COMPLEX)
                         │
                         ▼
-              Planner → Executor (ReAct + Tools)
+              Map to reasoning_effort (disabled / medium / high / max)
                         │
                         ▼
-              Verifier → Best-of-N voting → Answer
+              Executor (ReAct + Thinking + Tools) ←── Task Budget countdown
+                        │
+                        ▼
+              Verifier (LLM-as-Judge with thinking ON)
+                        │
+                        ▼
+              [Best-of-N voting for COMPLEX queries]
+                        │
+                        ▼
+                      Answer
 ```
 
-## What's inside
+## How it maps to Opus 4.7
 
-| Component | Purpose |
-|-----------|---------|
-| `router.py` | Classifies query complexity to avoid wasting compute |
-| `tools.py` | Calculator, Python sandbox, web search (pluggable) |
-| `executor.py` | ReAct loop with tool use |
-| `verifier.py` | LLM-as-Judge with a separate prompt context |
-| `voter.py` | Best-of-N sampling + verifier-scored selection |
-| `memory.py` | Conversation history + simple keyword RAG |
-| `orchestrator.py` | Glues everything together |
-| `cli.py` | Interactive REPL |
+| Claude Opus 4.7 Feature | DeepSeek V4 Pro Implementation |
+|---|---|
+| Adaptive thinking | `thinking: {type: "enabled"}` + `reasoning_effort` |
+| `effort: xhigh/high/medium/low` | `reasoning_effort: "max"/"high"/"medium"/"low"` |
+| Task budgets (token countdown) | Simulated: track tokens, inject budget message |
+| Interleaved thinking + tools | Native "thinking with tools" in V4 |
+| Sampling params locked | V4 ignores temp/top_p in thinking mode |
+
+## Architecture
+
+| File | Purpose |
+|------|---------|
+| `config.py` | Env-driven config with effort mapping |
+| `client.py` | OpenAI SDK → DeepSeek with thinking mode support |
+| `router.py` | Complexity classifier → reasoning_effort mapper |
+| `tools.py` | Calculator, Python exec, Web search (pluggable) |
+| `executor.py` | ReAct loop with interleaved thinking + tools |
+| `verifier.py` | LLM-as-Judge (separate context, thinking ON) |
+| `voter.py` | Best-of-N with diversity via prompt variation |
+| `task_budget.py` | Token countdown (simulated Opus 4.7 task_budget) |
+| `memory.py` | Window + JSONL archive + keyword RAG |
+| `orchestrator.py` | Pipeline glue |
+| `cli.py` | Rich REPL with --effort, --deep, --budget flags |
 
 ## Setup
 
 ```bash
-# Python 3.11+
-python -m venv .venv
-source .venv/bin/activate
+python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
-
 cp .env.example .env
-# edit .env and set DEEPSEEK_API_KEY
+# Set DEEPSEEK_API_KEY
 ```
 
-## Run
+## Usage
 
 ```bash
-# Interactive chat
+# Interactive
 akaradje
 
-# One-shot question
-akaradje --once "What's 2^32 + factorial(10)?"
+# One-shot with max effort (like Opus 4.7 xhigh)
+akaradje --once "Design a rate limiter" --effort max
 
-# Force deep reasoning path
-akaradje --once "Design a rate limiter for a multi-tenant API" --deep
+# Force deep reasoning path with full Best-of-N
+akaradje --once "Debug this race condition" --deep
+
+# Fast path (thinking OFF, like effort=low)
+akaradje --once "Hello" --fast
+
+# Custom budget (128k tokens for the agent loop)
+akaradje --once "Refactor the auth module" --budget 128000
+
+# Show the model's reasoning trace
+akaradje --once "Prove that sqrt(2) is irrational" --effort high --show-thinking
 ```
 
-## Tuning knobs
+## REPL commands
 
-All in `.env`:
+```
+/deep <q>    Force max effort + COMPLEX path
+/fast <q>    Thinking disabled
+/think <q>   Show reasoning trace
+/reset       Clear memory window
+/quit        Exit
+```
 
-- `BEST_OF_N` — how many candidate answers to sample for COMPLEX queries
-- `VERIFIER_ENABLED` — turn off to halve cost when prototyping
-- `MODEL_DEEP` — point at a stronger reasoning model
-- `MAX_REACT_ITERATIONS` — bound the agent loop
+## Key design choices
 
-## Notes on the DeepSeek "v4 pro" naming
+1. **Single model, variable effort** — V4 Pro handles everything from
+   greetings (thinking OFF) to system design (reasoning_effort=max).
+   No need for fast/standard/deep model tiers.
 
-DeepSeek's public model identifiers are `deepseek-chat` and
-`deepseek-reasoner`. If you have access to a different SKU, set
-`MODEL_DEEP` (etc.) to whatever string your provider exposes — the API is
-OpenAI-compatible and the code does not hard-code model names.
+2. **Task Budget via injection** — DeepSeek has no native task_budget
+   parameter. We simulate it by tracking tokens and injecting a countdown
+   message so the model self-moderates. Same behavioral effect.
 
-## Architectural choices, briefly
+3. **Diversity via prompt variation** — Since temp is ignored in thinking
+   mode, Best-of-N achieves diversity by giving each candidate a different
+   "approach angle" system suffix. More principled than temperature jitter.
 
-- **Router first.** A Haiku-sized classifier decides if a question even
-  deserves the deep path. Cheap insurance against burning tokens on
-  "hello".
-- **Separate verifier context.** The judge does not see the generator's
-  scratchpad. This is the easiest way to dodge the self-agreement failure
-  mode where a model rubber-stamps its own mistakes.
-- **Best-of-N over self-refine.** Parallel sampling + judge selection
-  empirically outperforms iterative self-correction on most reasoning
-  benchmarks, and it's trivially parallelizable.
-- **No fake jargon.** No "DiffAdapt", no "Recursive Tournament Voting".
-  Just classifier routing, ReAct, LLM-as-Judge, and best-of-N.
+4. **reasoning_content handling** — Per DeepSeek docs: pass it back when
+   tool calls happened (it participates in context), strip it otherwise
+   (API ignores it anyway, save tokens).
+
+5. **Verifier uses thinking** — The judge runs with `reasoning_effort: high`
+   so it actually reasons about correctness rather than rubber-stamping.
