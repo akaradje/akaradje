@@ -131,34 +131,77 @@ def create_app() -> Any:
 
     @app.post("/chat/stream")
     async def chat_stream(req: ChatRequest):
-        """SSE streaming endpoint."""
+        """True SSE streaming endpoint — token-by-token from DeepSeek API.
+
+        Event types sent to the client:
+        - {type: "progress", stage: "...", message: "..."}
+        - {type: "reasoning", text: "..."} (thinking chunks, if show_thinking)
+        - {type: "content", text: "..."} (answer chunks)
+        - {type: "tool_call", name: "...", status: "calling|done"}
+        - {type: "done", complexity: "...", tokens: N}
+        - {type: "error", message: "..."}
+        """
+        from .streaming import StreamingClient, ChunkType
+        from .router import Router
 
         async def event_generator():
-            force_complexity = None
-            if req.force_complexity:
-                force_complexity = Complexity(req.force_complexity.upper())
-            force_effort = None
-            if req.effort:
-                force_effort = ReasoningEffort(req.effort.lower())
+            try:
+                force_complexity = None
+                if req.force_complexity:
+                    force_complexity = Complexity(req.force_complexity.upper())
+                force_effort = None
+                if req.effort:
+                    force_effort = ReasoningEffort(req.effort.lower())
 
-            # For now, yield the full answer as a single event
-            # TODO: integrate with StreamingClient for true token-by-token
-            answer = await orch.ask(
-                req.message,
-                force_complexity=force_complexity,
-                force_effort=force_effort,
-            )
+                # Phase 1: Route
+                yield f"data: {json.dumps({'type': 'progress', 'stage': 'routing', 'message': 'Classifying query...'})}\n\n"
 
-            # Simulate progressive output by yielding chunks
-            chunk_size = 50
-            text = answer.text
-            for i in range(0, len(text), chunk_size):
-                chunk = text[i:i + chunk_size]
-                yield f"data: {json.dumps({'type': 'content', 'text': chunk})}\n\n"
-                await asyncio.sleep(0.01)  # tiny delay for client processing
+                router = Router(orch._client, cfg)
+                complexity = force_complexity or await router.classify(req.message)
+                thinking_mode, effort = router.get_thinking_config(complexity)
+                if force_effort:
+                    effort = force_effort
+                    from .config import ThinkingMode
+                    if force_effort.value in ("high", "max"):
+                        thinking_mode = ThinkingMode.ENABLED
 
-            # Final event with metadata
-            yield f"data: {json.dumps({'type': 'done', 'complexity': answer.complexity.value, 'tokens': answer.tokens_used})}\n\n"
+                yield f"data: {json.dumps({'type': 'progress', 'stage': 'thinking', 'message': f'Thinking with effort={effort.value}...'})}\n\n"
+
+                # Phase 2: Stream the response
+                streaming_client = StreamingClient(cfg)
+                messages = [
+                    {"role": "system", "content": "You are a helpful, careful assistant. Think step by step when needed."},
+                    {"role": "user", "content": req.message},
+                ]
+
+                total_content = ""
+                total_reasoning = ""
+
+                async for chunk in streaming_client.stream(
+                    messages=messages,
+                    thinking=thinking_mode,
+                    reasoning_effort=effort,
+                    max_tokens=8192,
+                ):
+                    if chunk.type == ChunkType.REASONING:
+                        total_reasoning += chunk.text
+                        yield f"data: {json.dumps({'type': 'reasoning', 'text': chunk.text})}\n\n"
+                    elif chunk.type == ChunkType.CONTENT:
+                        total_content += chunk.text
+                        yield f"data: {json.dumps({'type': 'content', 'text': chunk.text})}\n\n"
+                    elif chunk.type == ChunkType.TOOL_CALL:
+                        if chunk.tool_name:
+                            yield f"data: {json.dumps({'type': 'tool_call', 'name': chunk.tool_name, 'status': 'calling'})}\n\n"
+                    elif chunk.type == ChunkType.DONE:
+                        pass  # handled below
+                    elif chunk.type == ChunkType.ERROR:
+                        yield f"data: {json.dumps({'type': 'error', 'message': chunk.text})}\n\n"
+
+                # Final event
+                yield f"data: {json.dumps({'type': 'done', 'complexity': complexity.value, 'effort': effort.value, 'tokens': len(total_content) // 3})}\n\n"
+
+            except Exception as exc:
+                yield f"data: {json.dumps({'type': 'error', 'message': str(exc)})}\n\n"
 
         return StreamingResponse(
             event_generator(),
