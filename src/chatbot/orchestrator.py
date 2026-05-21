@@ -87,6 +87,7 @@ class Orchestrator:
         *,
         force_complexity: Complexity | None = None,
         force_effort: ReasoningEffort | None = None,
+        file_context: str | None = None,
     ) -> Answer:
         query = query.strip()
         if not query:
@@ -95,7 +96,7 @@ class Orchestrator:
                 thinking_mode="disabled", reasoning_effort="low",
             )
 
-        self._memory.add_user(query)
+        await self._memory.add_user(query)
 
         # Classify complexity
         complexity = force_complexity or await self._router.classify(query)
@@ -114,20 +115,23 @@ class Orchestrator:
 
         # Dispatch to appropriate path
         if complexity is Complexity.TRIVIAL:
-            answer = await self._handle_trivial(query)
+            answer = await self._handle_trivial(query, file_context)
         elif complexity is Complexity.STANDARD:
-            answer = await self._handle_standard(query, thinking, effort)
+            answer = await self._handle_standard(query, thinking, effort, file_context)
         else:
-            answer = await self._handle_complex(query, thinking, effort)
+            answer = await self._handle_complex(query, thinking, effort, file_context)
 
-        self._memory.add_assistant(answer.text)
+        await self._memory.add_assistant(answer.text)
         return answer
 
-    async def _handle_trivial(self, query: str) -> Answer:
+    async def _handle_trivial(self, query: str, file_context: str | None = None) -> Answer:
         prior = self._memory.recent_messages()[:-1]
+        system = _TRIVIAL_SYSTEM
+        if file_context:
+            system = f"{system}\n\n{file_context}"
         text = await self._client.chat_text(
             messages=[
-                {"role": "system", "content": _TRIVIAL_SYSTEM},
+                {"role": "system", "content": system},
                 *prior,
                 {"role": "user", "content": query},
             ],
@@ -143,9 +147,10 @@ class Orchestrator:
         )
 
     async def _handle_standard(
-        self, query: str, thinking: ThinkingMode, effort: ReasoningEffort
+        self, query: str, thinking: ThinkingMode, effort: ReasoningEffort,
+        file_context: str | None = None,
     ) -> Answer:
-        prior = self._build_prior(query)
+        prior = await self._build_prior(query)
         budget = self._budget_mgr.create()
 
         result = await self._executor.run(
@@ -154,6 +159,7 @@ class Orchestrator:
             reasoning_effort=effort,
             budget=budget,
             prior_messages=prior,
+            file_context=file_context,
         )
         verdict = await self._verifier.verify(query, result.answer)
 
@@ -171,14 +177,16 @@ class Orchestrator:
         )
 
     async def _handle_complex(
-        self, query: str, thinking: ThinkingMode, effort: ReasoningEffort
+        self, query: str, thinking: ThinkingMode, effort: ReasoningEffort,
+        file_context: str | None = None,
     ) -> Answer:
-        prior = self._build_prior(query)
+        prior = await self._build_prior(query)
         voting = await self._voter.vote(
             query,
             thinking=thinking,
             reasoning_effort=effort,
             prior_messages=prior,
+            file_context=file_context,
         )
         winner = voting.winner
         return Answer(
@@ -199,8 +207,8 @@ class Orchestrator:
             },
         )
 
-    def _build_prior(self, query: str) -> list[dict[str, Any]]:
-        prior = self._memory.build_prior_messages(query)
+    async def _build_prior(self, query: str) -> list[dict[str, Any]]:
+        prior = await self._memory.build_prior_messages(query)
         if prior and prior[-1].get("role") == "user" and prior[-1].get("content") == query:
             prior = prior[:-1]
         return prior

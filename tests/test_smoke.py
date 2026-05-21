@@ -69,7 +69,11 @@ async def test_python_exec_runtime_error():
 # ═══════════════════════════════════════════════════════════════════════════════
 
 async def test_web_search_stubbed():
-    assert "stubbed" in (await WebSearchTool().run({"query": "anything"}))
+    async def provider(q, k):
+        return [{"title": "Test Result", "url": "https://example.com", "snippet": f"Results for: {q}"}]
+    result = await WebSearchTool(provider=provider).run({"query": "anything"})
+    assert "anything" in result
+    assert "Test Result" in result
 
 
 async def test_web_search_with_provider():
@@ -90,7 +94,7 @@ async def test_registry_dispatch():
 
 def test_registry_schemas():
     names = {s["function"]["name"] for s in ToolRegistry.default().to_openai_schemas()}
-    assert names == {"calculator", "python_exec", "web_search"}
+    assert names == {"calculator", "python_exec", "web_search", "url_fetch", "file_read", "shell_exec"}
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

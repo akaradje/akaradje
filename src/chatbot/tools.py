@@ -532,6 +532,10 @@ class ToolRegistry:
             UrlFetchTool(),
         ])
 
+    def register(self, tool: Tool) -> None:
+        """Add or replace a tool in the registry."""
+        self._tools[tool.name] = tool
+
     def list(self) -> list[Tool]:
         return list(self._tools.values())
 

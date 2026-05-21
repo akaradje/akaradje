@@ -79,6 +79,7 @@ class Voter:
         reasoning_effort: ReasoningEffort = ReasoningEffort.HIGH,
         n: int | None = None,
         prior_messages: list[dict[str, Any]] | None = None,
+        file_context: str | None = None,
     ) -> VotingResult:
         n = n if n is not None else self._cfg.best_of_n
         n = max(1, min(n, len(_DIVERSITY_SUFFIXES)))
@@ -103,10 +104,14 @@ class Voter:
                     reasoning_effort=reasoning_effort,
                     budget=budget,
                     prior_messages=varied_prior,
+                    file_context=file_context,
                 )
             )
 
-        executor_results: list[ExecutorResult] = list(await asyncio.gather(*exec_tasks))
+        raw_results = await asyncio.gather(*exec_tasks, return_exceptions=True)
+        executor_results: list[ExecutorResult] = [
+            r for r in raw_results if not isinstance(r, BaseException)
+        ]
 
         # Verify each (verifier sees only Q, A — never the reasoning trace)
         verdict_tasks = [

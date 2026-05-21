@@ -280,10 +280,16 @@
         return document.getElementById('api-url').value.replace(/\/$/, '');
     }
 
+    function safeText(val) {
+        if (typeof val === 'string') return val;
+        if (val && typeof val === 'object') return val.text || val.answer || val.content || val.message || JSON.stringify(val, null, 2);
+        return String(val ?? '');
+    }
+
     function addMessage(role, content, meta = null) {
         const div = document.createElement('div');
         div.className = `message ${role}`;
-        div.textContent = content;
+        div.textContent = safeText(content);
         if (meta) {
             const metaDiv = document.createElement('div');
             metaDiv.className = 'meta';
@@ -325,34 +331,47 @@
         addMessage('user', text);
         statusEl.textContent = 'Thinking...';
 
-        const effort = document.getElementById('effort').value || null;
-        const complexity = document.getElementById('complexity').value || null;
+        const effortSel = document.getElementById('effort');
+        const complexitySel = document.getElementById('complexity');
+        const effort = effortSel && effortSel.value ? effortSel.value : null;
+        const complexity = complexitySel && complexitySel.value ? complexitySel.value : null;
         const showThinking = document.getElementById('show-thinking').checked;
-
-        const body = { message: text };
-        if (effort) body.effort = effort;
-        if (complexity) body.force_complexity = complexity;
 
         const stream = createStreamingMessage();
         let fullContent = '';
         let fullThinking = '';
 
         try {
+            // Build streaming payload with explicit shape — no spread, no mutable refs
+            const streamingPayload = (() => {
+                const p = { message: text };
+                if (effort) { p.effort = effort; }
+                if (complexity) { p.force_complexity = complexity; }
+                return JSON.stringify(p);
+            })();
+
+            const headers = new Headers();
+            headers.set('content-type', 'application/json');
+
             const resp = await fetch(`${getApiUrl()}/chat/stream`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body),
+                headers: headers,
+                body: streamingPayload,
             });
 
             if (!resp.ok) {
-                // Fallback to non-streaming endpoint
+                // Fallback to non-streaming endpoint — payload with ONLY "message"
+                const fallbackHeaders = new Headers();
+                fallbackHeaders.set('content-type', 'application/json');
+                const fallbackPayload = JSON.stringify({ message: text });
+
                 const resp2 = await fetch(`${getApiUrl()}/chat`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(body),
+                    headers: fallbackHeaders,
+                    body: fallbackPayload,
                 });
                 const data = await resp2.json();
-                fullContent = data.answer || data.detail || 'Error';
+                fullContent = safeText(data.answer || data.detail || 'Error');
                 stream.content.textContent = fullContent;
 
                 const tokens = data.tokens_used || 0;
@@ -386,15 +405,19 @@
                         try {
                             const chunk = JSON.parse(raw);
                             if (chunk.type === 'content') {
-                                fullContent += chunk.text;
+                                fullContent += safeText(chunk.text);
                                 stream.content.textContent = fullContent;
                                 statusEl.textContent = 'Streaming...';
                             } else if (chunk.type === 'reasoning') {
-                                fullThinking += chunk.text;
+                                fullThinking += safeText(chunk.text);
                                 if (showThinking) {
                                     stream.thinking.textContent = fullThinking;
                                     stream.thinking.classList.add('visible');
                                 }
+                            } else if (chunk.type === 'error') {
+                                fullContent = `Error: ${safeText(chunk.message || chunk.text)}`;
+                                stream.content.textContent = fullContent;
+                                stream.content.style.color = 'var(--error)';
                             } else if (chunk.type === 'done') {
                                 const tokens = chunk.tokens || 0;
                                 totalTokens += tokens;

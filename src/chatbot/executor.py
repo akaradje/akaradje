@@ -73,8 +73,12 @@ class Executor:
         reasoning_effort: ReasoningEffort = ReasoningEffort.MEDIUM,
         budget: BudgetStatus | None = None,
         prior_messages: list[dict[str, Any]] | None = None,
+        file_context: str | None = None,
     ) -> ExecutorResult:
-        messages: list[dict[str, Any]] = [{"role": "system", "content": self._system}]
+        system_content = self._system
+        if file_context:
+            system_content = f"{system_content}\n\n{file_context}"
+        messages: list[dict[str, Any]] = [{"role": "system", "content": system_content}]
         if prior_messages:
             messages.extend(prior_messages)
         messages.append({"role": "user", "content": query})

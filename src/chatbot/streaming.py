@@ -44,6 +44,7 @@ class StreamChunk:
     tool_name: str | None = None
     tool_args_delta: str | None = None
     finish_reason: str | None = None
+    usage: dict[str, Any] | None = None
 
 
 @dataclass
@@ -53,6 +54,7 @@ class StreamResult:
     reasoning_content: str = ""
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
     finish_reason: str | None = None
+    usage: dict[str, Any] | None = None
 
     # Accumulated tool call buffers (for assembly during streaming)
     _tool_buffers: dict[int, dict[str, Any]] = field(default_factory=dict)
@@ -83,6 +85,7 @@ class StreamResult:
                 )
         elif chunk.type == ChunkType.DONE:
             self.finish_reason = chunk.finish_reason
+            self.usage = chunk.usage
             # Finalize tool calls
             self.tool_calls = list(self._tool_buffers.values())
 
@@ -115,6 +118,7 @@ class StreamingClient:
             "temperature": 1.0,
             "top_p": 1.0,
             "stream": True,
+            "stream_options": {"include_usage": True},
         }
 
         extra_body: dict[str, Any] = {
@@ -165,11 +169,15 @@ class StreamingClient:
                             ),
                         )
 
-                # Stream finished
+                # Stream finished — include real token usage from final chunk
                 if finish_reason:
+                    usage = getattr(chunk, "usage", None)
+                    if usage is not None:
+                        usage = usage.model_dump() if hasattr(usage, "model_dump") else usage
                     yield StreamChunk(
                         type=ChunkType.DONE,
                         finish_reason=finish_reason,
+                        usage=usage,
                     )
 
         except Exception as exc:

@@ -140,6 +140,15 @@ class MetricsCollector:
 
         # After the query completes
         metrics.latency_ms = int((time.perf_counter() - start) * 1000)
+
+        # When only total_tokens is available (no breakdown from Answer),
+        # estimate a 70/30 prompt/completion split for cost approximation.
+        if metrics.total_tokens > 0 and not any([
+            metrics.prompt_tokens, metrics.completion_tokens, metrics.reasoning_tokens,
+        ]):
+            metrics.prompt_tokens = int(metrics.total_tokens * 0.7)
+            metrics.completion_tokens = int(metrics.total_tokens * 0.3)
+
         metrics.cost_usd = calculate_cost(
             prompt_tokens=metrics.prompt_tokens,
             completion_tokens=metrics.completion_tokens,

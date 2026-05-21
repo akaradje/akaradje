@@ -1,0 +1,226 @@
+
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+.wrap { padding: 1.5rem 0; font-family: var(--font-sans); color: var(--color-text-primary); }
+.tier-block { margin-bottom: 2rem; }
+.tier-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.tier-badge { font-size: 11px; font-weight: 500; padding: 3px 10px; border-radius: 99px; }
+.badge-trivial { background: #E1F5EE; color: #085041; }
+.badge-standard { background: #FAEEDA; color: #633806; }
+.badge-complex { background: #FCEBEB; color: #791F1F; }
+.tier-label { font-size: 16px; font-weight: 500; }
+.tier-meta { font-size: 12px; color: var(--color-text-secondary); }
+.test-list { display: flex; flex-direction: column; gap: 8px; }
+.test-card { border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); padding: 12px 16px; background: var(--color-background-primary); }
+.tc-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.tc-prompt { font-size: 13px; color: var(--color-text-primary); line-height: 1.5; flex: 1; }
+.tc-tags { display: flex; gap: 4px; flex-wrap: wrap; flex-shrink: 0; }
+.tag { font-size: 11px; padding: 2px 8px; border-radius: 99px; border: 0.5px solid var(--color-border-tertiary); color: var(--color-text-secondary); white-space: nowrap; }
+.tc-what { font-size: 11px; color: var(--color-text-tertiary); margin-top: 6px; line-height: 1.5; }
+.divider { height: 0.5px; background: var(--color-border-tertiary); margin: 1.5rem 0; }
+.component-row { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.comp-pill { font-size: 11px; padding: 2px 8px; border-radius: 99px; background: var(--color-background-secondary); color: var(--color-text-secondary); border: 0.5px solid var(--color-border-tertiary); }
+.comp-pill.active { background: #E6F1FB; color: #0C447C; border-color: #85B7EB; }
+.section-title { font-size: 12px; font-weight: 500; color: var(--color-text-secondary); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
+.edge-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.edge-card { border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-md); padding: 10px 12px; }
+.edge-title { font-size: 12px; font-weight: 500; color: var(--color-text-secondary); margin-bottom: 4px; }
+.edge-desc { font-size: 12px; color: var(--color-text-primary); line-height: 1.5; }
+.copy-btn { font-size: 11px; padding: 2px 8px; border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-md); background: transparent; color: var(--color-text-secondary); cursor: pointer; margin-top: 6px; }
+.copy-btn:hover { background: var(--color-background-secondary); }
+</style>
+
+<div class="wrap">
+
+<div class="tier-block">
+  <div class="tier-header">
+    <span class="tier-badge badge-trivial">TRIVIAL</span>
+    <span class="tier-label">ทดสอบ router ว่า route ถูกไหม</span>
+  </div>
+  <p class="tier-meta" style="margin-bottom:12px;">เป้าหมาย: ยืนยันว่า router ไม่ส่ง query ง่ายๆ ไปใช้ reasoning_effort สูงโดยไม่จำเป็น (ประหยัด cost)</p>
+  <div class="test-list">
+
+    <div class="test-card">
+      <div class="tc-row">
+        <span class="tc-prompt">"สวัสดี"</span>
+        <div class="tc-tags"><span class="tag">greeting</span><span class="tag">1 token</span></div>
+      </div>
+      <div class="tc-what">ต้องการ: route → TRIVIAL, reasoning_effort = disabled, latency &lt; 1s</div>
+      <div class="component-row">
+        <span class="comp-pill active">Router</span>
+        <span class="comp-pill">Executor</span>
+        <span class="comp-pill">Verifier</span>
+        <span class="comp-pill">Best-of-N</span>
+      </div>
+    </div>
+
+    <div class="test-card">
+      <div class="tc-row">
+        <span class="tc-prompt">"2 + 2 เท่ากับเท่าไหร่?"</span>
+        <div class="tc-tags"><span class="tag">arithmetic</span><span class="tag">factual</span></div>
+      </div>
+      <div class="tc-what">ต้องการ: TRIVIAL, ไม่ควร trigger thinking, ตอบ "4" ตรงๆ</div>
+      <div class="component-row">
+        <span class="comp-pill active">Router</span>
+        <span class="comp-pill">Executor</span>
+        <span class="comp-pill">Verifier</span>
+        <span class="comp-pill">Best-of-N</span>
+      </div>
+    </div>
+
+    <div class="test-card">
+      <div class="tc-row">
+        <span class="tc-prompt">"แปลว่า 'apple' เป็นภาษาไทย"</span>
+        <div class="tc-tags"><span class="tag">translation</span><span class="tag">lookup</span></div>
+      </div>
+      <div class="tc-what">ต้องการ: TRIVIAL, ตอบเร็ว ไม่ต้อง verify</div>
+      <div class="component-row">
+        <span class="comp-pill active">Router</span>
+        <span class="comp-pill">Executor</span>
+        <span class="comp-pill">Verifier</span>
+        <span class="comp-pill">Best-of-N</span>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<div class="tier-block">
+  <div class="tier-header">
+    <span class="tier-badge badge-standard">STANDARD</span>
+    <span class="tier-label">ทดสอบ ReAct + Thinking pipeline</span>
+  </div>
+  <p class="tier-meta" style="margin-bottom:12px;">เป้าหมาย: ตรวจว่า Executor ใช้ tools ถูก + Verifier จับ error ได้</p>
+  <div class="test-list">
+
+    <div class="test-card">
+      <div class="tc-row">
+        <span class="tc-prompt">"สรุปบทความนี้เป็น 3 bullet point: [paste บทความ 500 คำ]"</span>
+        <div class="tc-tags"><span class="tag">summarization</span><span class="tag">medium effort</span></div>
+      </div>
+      <div class="tc-what">ต้องการ: STANDARD, reasoning_effort = medium, Verifier ตรวจว่าครบ 3 ข้อ</div>
+      <div class="component-row">
+        <span class="comp-pill">Router</span>
+        <span class="comp-pill active">Executor</span>
+        <span class="comp-pill active">Verifier</span>
+        <span class="comp-pill">Best-of-N</span>
+      </div>
+    </div>
+
+    <div class="test-card">
+      <div class="tc-row">
+        <span class="tc-prompt">"เขียน Python function คำนวณ Fibonacci แบบ memoization"</span>
+        <div class="tc-tags"><span class="tag">coding</span><span class="tag">correctness</span></div>
+      </div>
+      <div class="tc-what">ต้องการ: STANDARD, Verifier รัน code ตรวจผลลัพธ์, ถ้า fail → retry</div>
+      <div class="component-row">
+        <span class="comp-pill">Router</span>
+        <span class="comp-pill active">Executor</span>
+        <span class="comp-pill active">Verifier</span>
+        <span class="comp-pill">Best-of-N</span>
+      </div>
+    </div>
+
+    <div class="test-card">
+      <div class="tc-row">
+        <span class="tc-prompt">"วางแผนเมนูอาหารสุขภาพ 1 สัปดาห์ พร้อมแคลอรี่"</span>
+        <div class="tc-tags"><span class="tag">planning</span><span class="tag">structured output</span></div>
+      </div>
+      <div class="tc-what">ต้องการ: STANDARD, Verifier ตรวจว่ามีครบ 7 วัน + มีค่าแคลอรี่</div>
+      <div class="component-row">
+        <span class="comp-pill">Router</span>
+        <span class="comp-pill active">Executor</span>
+        <span class="comp-pill active">Verifier</span>
+        <span class="comp-pill">Best-of-N</span>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<div class="tier-block">
+  <div class="tier-header">
+    <span class="tier-badge badge-complex">COMPLEX</span>
+    <span class="tier-label">ทดสอบ Best-of-N + full pipeline</span>
+  </div>
+  <p class="tier-meta" style="margin-bottom:12px;">เป้าหมาย: ตรวจว่า Best-of-N เลือก answer ที่ดีที่สุดจริง + Task Budget ไม่ overflow</p>
+  <div class="test-list">
+
+    <div class="test-card">
+      <div class="tc-row">
+        <span class="tc-prompt">"วิเคราะห์ trade-off ระหว่าง microservices vs monolith สำหรับ startup ที่มี team 5 คน"</span>
+        <div class="tc-tags"><span class="tag">multi-perspective</span><span class="tag">high effort</span></div>
+      </div>
+      <div class="tc-what">ต้องการ: COMPLEX, Best-of-N สร้างหลาย answer → voting เลือกดีสุด, ตรวจว่า output ครอบคลุมทั้ง 2 ด้าน</div>
+      <div class="component-row">
+        <span class="comp-pill active">Router</span>
+        <span class="comp-pill active">Executor</span>
+        <span class="comp-pill active">Verifier</span>
+        <span class="comp-pill active">Best-of-N</span>
+      </div>
+    </div>
+
+    <div class="test-card">
+      <div class="tc-row">
+        <span class="tc-prompt">"proof ว่า √2 เป็นจำนวนอตรรกยะ พร้อมอธิบายทุก step"</span>
+        <div class="tc-tags"><span class="tag">math proof</span><span class="tag">reasoning chain</span></div>
+      </div>
+      <div class="tc-what">ต้องการ: COMPLEX, Thinking ON, Verifier ตรวจ logical chain, Best-of-N เลือก proof ที่สมบูรณ์</div>
+      <div class="component-row">
+        <span class="comp-pill active">Router</span>
+        <span class="comp-pill active">Executor</span>
+        <span class="comp-pill active">Verifier</span>
+        <span class="comp-pill active">Best-of-N</span>
+      </div>
+    </div>
+
+    <div class="test-card">
+      <div class="tc-row">
+        <span class="tc-prompt">"ออกแบบ database schema สำหรับ e-commerce ที่รองรับ multi-currency + flash sale"</span>
+        <div class="tc-tags"><span class="tag">system design</span><span class="tag">constraints</span></div>
+      </div>
+      <div class="tc-what">ต้องการ: COMPLEX, max reasoning_effort, Verifier ตรวจ schema consistency + edge cases</div>
+      <div class="component-row">
+        <span class="comp-pill active">Router</span>
+        <span class="comp-pill active">Executor</span>
+        <span class="comp-pill active">Verifier</span>
+        <span class="comp-pill active">Best-of-N</span>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<div class="tier-block">
+  <div class="section-title">Edge cases — ทดสอบ boundary ของ router</div>
+  <div class="edge-grid">
+    <div class="edge-card">
+      <div class="edge-title">Ambiguous complexity</div>
+      <div class="edge-desc">"อธิบาย quantum entanglement แบบง่ายๆ" — ดูว่า router จัด STANDARD หรือ COMPLEX และสมเหตุไหม</div>
+    </div>
+    <div class="edge-card">
+      <div class="edge-title">Task budget overflow</div>
+      <div class="edge-desc">"ทำ step-by-step analysis ของ 50 หุ้น" — ดูว่า budget countdown หยุดทันก่อน cost พุ่ง</div>
+    </div>
+    <div class="edge-card">
+      <div class="edge-title">Verifier disagreement</div>
+      <div class="edge-desc">ส่ง answer ที่ผิดครึ่งถูกครึ่ง — ดูว่า Verifier จับได้และ trigger retry หรือไม่</div>
+    </div>
+    <div class="edge-card">
+      <div class="edge-title">Best-of-N consistency</div>
+      <div class="edge-desc">ส่ง prompt เดิม 3 ครั้ง — ดูว่า voting เลือก answer เดิมสม่ำเสมอหรือ unstable</div>
+    </div>
+  </div>
+</div>
+
+<div style="margin-top:1.5rem; text-align:center;">
+  <button onclick="sendPrompt('ช่วยเขียน Python script รัน test cases พวกนี้กับ akaradje API ได้เลยไหม?')" style="font-size:13px; padding:8px 20px; border:0.5px solid var(--color-border-secondary); border-radius:var(--border-radius-md); background:transparent; color:var(--color-text-primary); cursor:pointer;">เขียน script รัน test cases เหล่านี้ ↗</button>
+</div>
+
+</div>
