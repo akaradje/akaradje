@@ -57,7 +57,7 @@ def create_app() -> Any:
     app = FastAPI(
         title="akaradje",
         description="DeepSeek V4 Pro chatbot with Opus 4.7-class scaffolding",
-        version="0.2.0",
+        version="0.3.0",
     )
 
     app.add_middleware(
