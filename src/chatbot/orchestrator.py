@@ -27,6 +27,7 @@ from .client import LLMClient
 from .config import Config, ReasoningEffort, ThinkingMode
 from .executor import Executor
 from .memory import ConversationMemory
+from .planner import Planner
 from .router import Complexity, Router
 from .task_budget import TaskBudgetManager
 from .tools import ToolRegistry
@@ -73,9 +74,28 @@ class Orchestrator:
         self._budget_mgr = TaskBudgetManager(config)
 
         self._router = Router(self._client, config)
+        self._planner = Planner(self._client, config)
         self._executor = Executor(self._client, config, self._tools)
         self._verifier = Verifier(self._client, config)
         self._voter = Voter(self._executor, self._verifier, config, self._budget_mgr)
+
+    async def _build_plan_context(self, query: str, file_context: str | None) -> tuple[str | None, Any]:
+        """Evaluate planning and merge plan context into file_context.
+
+        Returns (merged_context, plan_or_None).
+        """
+        try:
+            plan = await self._planner.evaluate(query)
+        except Exception as exc:
+            log.warning("orchestrator: planner failed (%s), continuing without plan", exc)
+            return file_context, None
+
+        if plan is None:
+            return file_context, None
+
+        plan_context = plan.to_context_string()
+        merged = f"{plan_context}\n\n{file_context}" if file_context else plan_context
+        return merged, plan
 
     @property
     def memory(self) -> ConversationMemory:
@@ -153,15 +173,22 @@ class Orchestrator:
         prior = await self._build_prior(query)
         budget = self._budget_mgr.create()
 
+        # Planning phase — generate structured plan for non-trivial tasks
+        merged_context, plan = await self._build_plan_context(query, file_context)
+
         result = await self._executor.run(
             query,
             thinking=thinking,
             reasoning_effort=effort,
             budget=budget,
             prior_messages=prior,
-            file_context=file_context,
+            file_context=merged_context,
         )
         verdict = await self._verifier.verify(query, result.answer)
+
+        diagnostics: dict[str, Any] = {"path": "standard-executor+verifier"}
+        if plan is not None:
+            diagnostics["plan"] = plan.to_dict()
 
         return Answer(
             text=result.answer,
@@ -173,7 +200,7 @@ class Orchestrator:
             tool_calls=result.tool_calls_made,
             tokens_used=result.tokens_used,
             reasoning_trace=result.reasoning_trace,
-            diagnostics={"path": "standard-executor+verifier"},
+            diagnostics=diagnostics,
         )
 
     async def _handle_complex(
@@ -181,14 +208,27 @@ class Orchestrator:
         file_context: str | None = None,
     ) -> Answer:
         prior = await self._build_prior(query)
+
+        # Planning phase
+        merged_context, plan = await self._build_plan_context(query, file_context)
+
         voting = await self._voter.vote(
             query,
             thinking=thinking,
             reasoning_effort=effort,
             prior_messages=prior,
-            file_context=file_context,
+            file_context=merged_context,
         )
         winner = voting.winner
+
+        diagnostics: dict[str, Any] = {
+            "path": "complex-best-of-n",
+            "n_candidates": voting.n,
+            "scores": [round(c.score, 2) for c in voting.candidates],
+        }
+        if plan is not None:
+            diagnostics["plan"] = plan.to_dict()
+
         return Answer(
             text=winner.answer,
             complexity=Complexity.COMPLEX,
@@ -200,11 +240,7 @@ class Orchestrator:
             tool_calls=winner.executor.tool_calls_made,
             tokens_used=sum(c.executor.tokens_used for c in voting.candidates),
             reasoning_trace=winner.executor.reasoning_trace,
-            diagnostics={
-                "path": "complex-best-of-n",
-                "n_candidates": voting.n,
-                "scores": [round(c.score, 2) for c in voting.candidates],
-            },
+            diagnostics=diagnostics,
         )
 
     async def _build_prior(self, query: str) -> list[dict[str, Any]]:

@@ -2,6 +2,23 @@
 
 All notable changes to the akaradje chatbot project.
 
+## [0.7.0] — 2026-05-22
+
+### Added — Phase 6: Multi-step Planner
+
+- **Planner** (`src/chatbot/planner.py`): Strategic task planner that evaluates incoming queries and generates structured execution plans using LLM Structured Output (JSON Mode with strict schema). Trivial queries skip planning; complex queries receive a 3–7 step plan.
+- **PlanStep dataclasses**: Each step carries index, description, tool_hints, expected_output, and status (pending → running → done / failed). Plan tracks completion state and current active step.
+- **Orchestrator integration** (`src/chatbot/orchestrator.py`): `_handle_standard` and `_handle_complex` invoke the Planner before executor runs. Generated plan is prepended to system prompt context as formatted instructions. Plan metadata included in diagnostics.
+- **StreamingOrchestrator integration** (`src/chatbot/streaming_orchestrator.py`): Planner invoked during `_stream_standard`. Emits `{type: "plan_update", plan: {...}, status: "created"}` SSE event when a plan is generated. Tracks tool completion against plan steps and emits subsequent `plan_update` events on step transitions (`step_started`, `step_completed`).
+- **PlanPanel** (`frontend/src/components/PlanPanel.jsx`): Interactive checklist visualization with animated status indicators — ⏳ pending (dim dot), ⚡ running (pulsing accent ring), ✅ done (green checkmark), ❌ failed (red X). Includes progress bar with gradient fill, tool hint badges, expected output previews, and a footer status line.
+- **useChat hook**: Captures `plan_update` SSE events, exposes `plan` state. Auto-clears plan on chat reset.
+- **ChatArea integration**: PlanPanel renders above the message list when a plan is active.
+
+### Configuration
+- Planner uses JSON Mode via `response_format` parameter (OpenAI-compatible structured output)
+- `_PLAN_SCHEMA` enforces strict typing: `needs_planning`, `reasoning`, `steps[]`
+- Max steps configurable via `max_steps` parameter (default 7, max 10)
+
 ## [0.6.0] — 2026-05-22
 
 ### Added — Phase 5: Vector RAG Pipeline

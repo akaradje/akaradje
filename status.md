@@ -9,8 +9,9 @@
 | 3 | **Artifacts System** (ArtifactStore, ArtifactTool, split-panel UI, type renderers) | ✅ Complete | 2026-05-22 |
 | 4 | **Projects System** (ProjectStore, SQLite persistence, sidebar, context injection) | ✅ Complete | 2026-05-22 |
 | 5 | **Vector RAG Pipeline** (VectorMemory, Qdrant, semantic search, auto-indexing) | ✅ Complete | 2026-05-22 |
-| 6 | Security & Performance (guardrails, caching, compaction) | ✅ Complete | 2026-05-21 |
-| 7 | Evaluation & Testing (smoke tests, E2E stress tests, eval runner) | ✅ Complete | 2026-05-22 |
+| 6 | **Multi-step Planner** (Planner, PlanStep, structured output, plan visualization) | ✅ Complete | 2026-05-22 |
+| 7 | Security & Performance (guardrails, caching, compaction) | ✅ Complete | 2026-05-21 |
+| 8 | Evaluation & Testing (smoke tests, E2E stress tests, eval runner) | ✅ Complete | 2026-05-22 |
 
 ## Current Architecture
 
@@ -21,6 +22,7 @@ akaradje/
 │   ├── artifacts.py              # ArtifactStore + ArtifactTool (Phase 3)
 │   ├── projects.py               # ProjectStore + Project + ProjectFile (Phase 4)
 │   ├── vector_memory.py          # VectorMemory + Qdrant + embeddings (Phase 5)
+│   ├── planner.py                # Multi-step Planner + PlanStep (Phase 6)
 │   ├── streaming_orchestrator.py # Full pipeline orchestrator with SSE
 │   ├── orchestrator.py           # Non-streaming orchestrator (COMPLEX path)
 │   ├── streaming.py              # Raw LLM streaming client

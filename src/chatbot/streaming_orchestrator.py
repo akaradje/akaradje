@@ -28,6 +28,7 @@ from .executor import _truncate  # reuse truncation helper
 from .guardrails import GuardrailsManager, SafetyLevel
 from .memory import ConversationMemory
 from .orchestrator import Orchestrator
+from .planner import Planner, StepStatus
 from .router import Complexity, Router
 from .streaming import ChunkType, StreamingClient
 from .task_budget import TaskBudgetManager
@@ -85,6 +86,7 @@ class StreamingOrchestrator:
             self._tools.register(self._artifact_tool)
 
         self._router = Router(self._client, config)
+        self._planner = Planner(self._client, config)
         self._verifier = Verifier(self._client, config)
         self._streaming = StreamingClient(config)
         self._guardrails = GuardrailsManager()
@@ -240,9 +242,30 @@ class StreamingOrchestrator:
         effort: ReasoningEffort,
         file_context: str | None,
     ) -> AsyncIterator[dict[str, Any]]:
-        """Streaming ReAct loop with tool execution and verifier."""
+        """Streaming ReAct loop with tool execution, planner, and verifier."""
         prior = await self._build_prior(query)
         budget = self._budget_mgr.create()
+
+        # ═══ Planning phase ═══════════════════════════════════════════
+        yield {"type": "progress", "stage": "planning", "message": "Evaluating task..."}
+        plan = None
+        try:
+            plan = await self._planner.evaluate(query)
+        except Exception as exc:
+            log.warning("streaming_orch: planner failed (%s), continuing without plan", exc)
+
+        if plan is not None:
+            yield {
+                "type": "plan_update",
+                "plan": plan.to_dict(),
+                "status": "created",
+            }
+            plan_context = plan.to_context_string()
+            if file_context:
+                file_context = f"{plan_context}\n\n{file_context}"
+            else:
+                file_context = plan_context
+        # ═══════════════════════════════════════════════════════════════
 
         system = _EXECUTOR_SYSTEM
         if file_context:
@@ -374,6 +397,41 @@ class StreamingOrchestrator:
                     "duration_ms": duration_ms,
                     "status": "done",
                 }
+
+                # ── Plan step tracking ───────────────────────────────
+                if plan is not None and not plan.is_complete:
+                    # Mark the first pending step that hints this tool as running → done
+                    for step in plan.steps:
+                        if step.status.value == "running":
+                            plan.complete_step(step.index)
+                            yield {
+                                "type": "plan_update",
+                                "plan": plan.to_dict(),
+                                "status": "step_completed",
+                                "step_index": step.index,
+                            }
+                            # Advance to next step
+                            next_step = plan.current_step
+                            if next_step and next_step.status == StepStatus.PENDING:
+                                plan.start_step(next_step.index)
+                                yield {
+                                    "type": "plan_update",
+                                    "plan": plan.to_dict(),
+                                    "status": "step_started",
+                                    "step_index": next_step.index,
+                                }
+                            break
+                    else:
+                        # No step was running — start the first pending step
+                        first = plan.current_step
+                        if first and first.status == StepStatus.PENDING:
+                            plan.start_step(first.index)
+                            yield {
+                                "type": "plan_update",
+                                "plan": plan.to_dict(),
+                                "status": "step_started",
+                                "step_index": first.index,
+                            }
 
                 # ── Artifact event ───────────────────────────────────
                 if tc_name == "generate_artifact":

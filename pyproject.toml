@@ -1,6 +1,6 @@
 [project]
 name = "akaradje-chatbot"
-version = "0.6.0"
+version = "0.7.0"
 description = "DeepSeek V4 Pro chatbot with Opus 4.7-class scaffolding: thinking mode, effort routing, task budgets, tool use, Best-of-N, streaming, web search, FastAPI"
 requires-python = ">=3.11"
 dependencies = [
