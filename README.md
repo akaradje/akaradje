@@ -9,86 +9,11 @@
 
 </div>
 
----
 
 I build **agent systems**, **LLM tooling**, and **production-grade sandboxes** — the infrastructure that makes frontier models useful in practice.
 
 My work sits at the intersection of **reasoning architectures**, **tool use**, and **deterministic UI enforcement**. I care about engineering patterns that scale, not prompt hacks.
 
----
-
-## What I Build
-
-<table>
-<tr>
-<td width="50%">
-
-### 🤖 akaradje
-**DeepSeek V4 Pro chatbot with Opus 4.7-class scaffolding**
-
-Query → Router → ReAct Executor → Verifier → Best-of-N voting. Task budgets, thinking mode, streaming, web search, vector RAG, multi-step planner, citations.
-
-`Python` `FastAPI` `React` `Qdrant`
-
-</td>
-<td width="50%">
-
-### 🧪 hydra-sandbox
-**Production-grade Python sandbox for untrusted & LLM-generated code**
-
-Deterministic resource limits, syscall filtering, network isolation. Safe execution of arbitrary code at scale.
-
-`Python` `Docker` `Security`
-
-</td>
-</tr>
-<tr>
-<td width="50%">
-
-### 🎨 cybernetic-design-system
-**Deterministic design-enforcement layer for AI-generated UI**
-
-Grid, contrast, and aesthetic constraints as code. Includes MCP server for Claude Code — AI-generated UI that passes design review.
-
-`TypeScript` `MCP` `Design Systems`
-
-</td>
-<td width="50%">
-
-### 🔬 agent_lab
-**Multi-agent research/build pipeline with enforced cost limits**
-
-Six specialized agents, human checkpoints, controlled execution. Research and build at scale without runaway costs.
-
-`Python` `Agents` `Pipelines`
-
-</td>
-</tr>
-<tr>
-<td width="50%">
-
-### 🌊 Liquid-State-Engine
-**Canvas-based interactive fluid data manipulation**
-
-CPU-optimized architecture for real-time fluid simulations and interactive data visualization.
-
-`JavaScript` `Canvas` `Physics`
-
-</td>
-<td width="50%">
-
-### 📈 binance-futures-bot
-**Binance futures trading bot**
-
-Automated trading strategies with risk management.
-
-`Python` `Trading` `APIs`
-
-</td>
-</tr>
-</table>
-
----
 
 ## Stack
 
