@@ -35,12 +35,5 @@ Infra         Docker · Playwright · GitHub Actions
 
 > **Deterministic enforcement.** Design systems, sandboxes, and agent guardrails should be code — not vibes.
 
----
 
-<div align="center">
 
-![akaradje's GitHub stats](https://github-readme-stats.vercel.app/api?username=akaradje&show_icons=true&theme=radical&hide_border=true&count_private=true)
-
-![Top Languages](https://github-readme-stats.vercel.app/api/top-langs/?username=akaradje&layout=compact&theme=radical&hide_border=true)
-
-</div>
