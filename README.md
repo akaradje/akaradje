@@ -1,113 +1,121 @@
-# akaradje
+<div align="center">
 
-A DeepSeek V4 Pro chatbot with **Opus 4.7-class scaffolding**.
+# Monoia akaradje
 
-Instead of inventing jargon, this implements the actual engineering patterns
-that make frontier models feel smart — applied to DeepSeek's API:
+**Building AI agents that actually work.**
+
+[![GitHub followers](https://img.shields.io/github/followers/akaradje?style=social)](https://github.com/akaradje)
+[![GitHub stars](https://img.shields.io/github/stars/akaradje?style=social)](https://github.com/akaradje)
+
+</div>
+
+---
+
+I build **agent systems**, **LLM tooling**, and **production-grade sandboxes** — the infrastructure that makes frontier models useful in practice.
+
+My work sits at the intersection of **reasoning architectures**, **tool use**, and **deterministic UI enforcement**. I care about engineering patterns that scale, not prompt hacks.
+
+---
+
+## What I Build
+
+<table>
+<tr>
+<td width="50%">
+
+### 🤖 akaradje
+**DeepSeek V4 Pro chatbot with Opus 4.7-class scaffolding**
+
+Query → Router → ReAct Executor → Verifier → Best-of-N voting. Task budgets, thinking mode, streaming, web search, vector RAG, multi-step planner, citations.
+
+`Python` `FastAPI` `React` `Qdrant`
+
+</td>
+<td width="50%">
+
+### 🧪 hydra-sandbox
+**Production-grade Python sandbox for untrusted & LLM-generated code**
+
+Deterministic resource limits, syscall filtering, network isolation. Safe execution of arbitrary code at scale.
+
+`Python` `Docker` `Security`
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+### 🎨 cybernetic-design-system
+**Deterministic design-enforcement layer for AI-generated UI**
+
+Grid, contrast, and aesthetic constraints as code. Includes MCP server for Claude Code — AI-generated UI that passes design review.
+
+`TypeScript` `MCP` `Design Systems`
+
+</td>
+<td width="50%">
+
+### 🔬 agent_lab
+**Multi-agent research/build pipeline with enforced cost limits**
+
+Six specialized agents, human checkpoints, controlled execution. Research and build at scale without runaway costs.
+
+`Python` `Agents` `Pipelines`
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+### 🌊 Liquid-State-Engine
+**Canvas-based interactive fluid data manipulation**
+
+CPU-optimized architecture for real-time fluid simulations and interactive data visualization.
+
+`JavaScript` `Canvas` `Physics`
+
+</td>
+<td width="50%">
+
+### 📈 binance-futures-bot
+**Binance futures trading bot**
+
+Automated trading strategies with risk management.
+
+`Python` `Trading` `APIs`
+
+</td>
+</tr>
+</table>
+
+---
+
+## Stack
 
 ```
-Query → Router → Complexity tier (TRIVIAL / STANDARD / COMPLEX)
-                        │
-                        ▼
-              Map to reasoning_effort (disabled / medium / high / max)
-                        │
-                        ▼
-              Executor (ReAct + Thinking + Tools) ←── Task Budget countdown
-                        │
-                        ▼
-              Verifier (LLM-as-Judge with thinking ON)
-                        │
-                        ▼
-              [Best-of-N voting for COMPLEX queries]
-                        │
-                        ▼
-                      Answer
+Languages     Python · TypeScript · JavaScript
+AI/ML         DeepSeek · OpenAI SDK · Qdrant · Vector RAG
+Backend       FastAPI · WebSocket · SSE · SQLite
+Frontend      React · Vite · Tailwind CSS
+Infra         Docker · Playwright · GitHub Actions
 ```
 
-## How it maps to Opus 4.7
+---
 
-| Claude Opus 4.7 Feature | DeepSeek V4 Pro Implementation |
-|---|---|
-| Adaptive thinking | `thinking: {type: "enabled"}` + `reasoning_effort` |
-| `effort: xhigh/high/medium/low` | `reasoning_effort: "max"/"high"/"medium"/"low"` |
-| Task budgets (token countdown) | Simulated: track tokens, inject budget message |
-| Interleaved thinking + tools | Native "thinking with tools" in V4 |
-| Sampling params locked | V4 ignores temp/top_p in thinking mode |
+## Philosophy
 
-## Architecture
+> **Single model, variable effort.** One frontier model handles everything from greetings (thinking OFF) to system design (reasoning max). The scaffolding adapts, not the model.
 
-| File | Purpose |
-|------|---------|
-| `config.py` | Env-driven config with effort mapping |
-| `client.py` | OpenAI SDK → DeepSeek with thinking mode support |
-| `router.py` | Complexity classifier → reasoning_effort mapper |
-| `tools.py` | Calculator, Python exec, Web search (pluggable) |
-| `executor.py` | ReAct loop with interleaved thinking + tools |
-| `verifier.py` | LLM-as-Judge (separate context, thinking ON) |
-| `voter.py` | Best-of-N with diversity via prompt variation |
-| `task_budget.py` | Token countdown (simulated Opus 4.7 task_budget) |
-| `memory.py` | Window + JSONL archive + keyword RAG |
-| `orchestrator.py` | Pipeline glue |
-| `cli.py` | Rich REPL with --effort, --deep, --budget flags |
+> **Diversity via prompt variation.** When temperature is locked in thinking mode, Best-of-N achieves diversity through approach angles, not parameter jitter.
 
-## Setup
+> **Deterministic enforcement.** Design systems, sandboxes, and agent guardrails should be code — not vibes.
 
-```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
-cp .env.example .env
-# Set DEEPSEEK_API_KEY
-```
+---
 
-## Usage
+<div align="center">
 
-```bash
-# Interactive
-akaradje
+![akaradje's GitHub stats](https://github-readme-stats.vercel.app/api?username=akaradje&show_icons=true&theme=radical&hide_border=true&count_private=true)
 
-# One-shot with max effort (like Opus 4.7 xhigh)
-akaradje --once "Design a rate limiter" --effort max
+![Top Languages](https://github-readme-stats.vercel.app/api/top-langs/?username=akaradje&layout=compact&theme=radical&hide_border=true)
 
-# Force deep reasoning path with full Best-of-N
-akaradje --once "Debug this race condition" --deep
-
-# Fast path (thinking OFF, like effort=low)
-akaradje --once "Hello" --fast
-
-# Custom budget (128k tokens for the agent loop)
-akaradje --once "Refactor the auth module" --budget 128000
-
-# Show the model's reasoning trace
-akaradje --once "Prove that sqrt(2) is irrational" --effort high --show-thinking
-```
-
-## REPL commands
-
-```
-/deep <q>    Force max effort + COMPLEX path
-/fast <q>    Thinking disabled
-/think <q>   Show reasoning trace
-/reset       Clear memory window
-/quit        Exit
-```
-
-## Key design choices
-
-1. **Single model, variable effort** — V4 Pro handles everything from
-   greetings (thinking OFF) to system design (reasoning_effort=max).
-   No need for fast/standard/deep model tiers.
-
-2. **Task Budget via injection** — DeepSeek has no native task_budget
-   parameter. We simulate it by tracking tokens and injecting a countdown
-   message so the model self-moderates. Same behavioral effect.
-
-3. **Diversity via prompt variation** — Since temp is ignored in thinking
-   mode, Best-of-N achieves diversity by giving each candidate a different
-   "approach angle" system suffix. More principled than temperature jitter.
-
-4. **reasoning_content handling** — Per DeepSeek docs: pass it back when
-   tool calls happened (it participates in context), strip it otherwise
-   (API ignores it anyway, save tokens).
-
-5. **Verifier uses thinking** — The judge runs with `reasoning_effort: high`
-   so it actually reasons about correctness rather than rubber-stamping.
+</div>
